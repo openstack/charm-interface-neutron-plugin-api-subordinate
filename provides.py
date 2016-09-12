@@ -17,12 +17,12 @@ class NeutronPluginAPISubordinate(RelationBase):
     def broken(self):
         self.remove_state('{relation_name}.connected')
 
-    def configure_plugin(self, plugin=None, core_plugin=None,
+    def configure_plugin(self, neutron_plugin=None, core_plugin=None,
                          neutron_plugin_config=None, service_plugins=None,
                          subordinate_configuration=None):
         conversation = self.conversation()
         relation_info = {
-            'neutron-plugin': plugin,
+            'neutron-plugin': neutron_plugin,
             'core-plugin': core_plugin,
             'neutron-plugin-config': neutron_plugin_config,
             'service-plugins': service_plugins,
