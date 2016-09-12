@@ -9,17 +9,49 @@ from charms.reactive import scopes
 class NeutronPluginAPISubordinate(RelationBase):
     scope = scopes.GLOBAL
 
-    @hook('{provides:neutron-plugin-api-subordinate}-relation-{joined,changed}')
+    @hook(
+        '{provides:neutron-plugin-api-subordinate}-relation-{joined,changed}')
     def changed(self):
+        """Set connected state"""
         self.set_state('{relation_name}.connected')
 
-    @hook('{provides:neutron-plugin-api-subordinate}-relation-{broken,departed}')
+    @hook(
+        '{provides:neutron-plugin-api-subordinate}-relation-{broken,departed}')
     def broken(self):
+        """Remove connected state"""
         self.remove_state('{relation_name}.connected')
 
     def configure_plugin(self, neutron_plugin=None, core_plugin=None,
                          neutron_plugin_config=None, service_plugins=None,
                          subordinate_configuration=None):
+        """Send principle plugin information
+
+        :param neutron_plugin: str Neutron plugin name eg odl
+        :param core_plugin: str eg neutron.plugins.ml2.plugin.Ml2Plugin
+        :param neutron-plugin-config: str /etc/neutron/plugins/ml2/ml2_conf.ini
+        :param service-plugins str: Comma delimited list of service plugins eg
+                                    router,firewall,lbaas,vpnaas,metering
+        :param subordinate_configuration dict: Configuration for the principle
+                                               to inject into a configuration
+                                               file it is managing eg:
+        # Add sections and tuples to insert values into neutron-server's
+        # neutron.conf e.g.
+        # {
+        #     "neutron-api": {
+        #        "/etc/neutron/neutron.conf": {
+        #             "sections": {
+        #                 'DEFAULT': [
+        #                     ('key1', 'val1')
+        #                     ('key2', 'val2')
+        #                 ],
+        #                 'agent': [
+        #                     ('key3', 'val3')
+        #                 ],
+        #             }
+        #         }
+        #     }
+        # }
+        """
         conversation = self.conversation()
         relation_info = {
             'neutron-plugin': neutron_plugin,
