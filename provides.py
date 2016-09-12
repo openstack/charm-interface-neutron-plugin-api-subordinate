@@ -1,3 +1,4 @@
+import uuid
 import json
 
 from charms.reactive import hook
