@@ -14,11 +14,13 @@ class NeutronPluginAPISubordinate(RelationBase):
     def changed(self):
         """Set connected state"""
         self.set_state('{relation_name}.connected')
+        self.set_state('{relation_name}.available')
 
     @hook(
         '{provides:neutron-plugin-api-subordinate}-relation-{broken,departed}')
     def broken(self):
         """Remove connected state"""
+        self.remove_state('{relation_name}.available')
         self.remove_state('{relation_name}.connected')
 
     def configure_plugin(self, neutron_plugin=None, core_plugin=None,
