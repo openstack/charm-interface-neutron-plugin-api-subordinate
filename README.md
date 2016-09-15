@@ -51,7 +51,7 @@ def configure_principle(api_principle):
         subordinate_configuration=inject_config)
 ```
 
-## Restart requests
+## request\_restart
 
 Requesting a restart of all remote services:
 
