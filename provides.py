@@ -23,7 +23,7 @@ class NeutronPluginAPISubordinate(RelationBase):
         self.remove_state('{relation_name}.available')
         self.remove_state('{relation_name}.connected')
 
-    def configure_plugin(self, neutron_plugin=None, core_plugin=None,
+    def configure_plugin(self, neutron_plugin, core_plugin=None,
                          neutron_plugin_config=None, service_plugins=None,
                          subordinate_configuration=None):
         """Send principle plugin information
@@ -78,5 +78,4 @@ class NeutronPluginAPISubordinate(RelationBase):
         relation_info = {
             key: str(uuid.uuid4()),
         }
-        print(relation_info)
         self.set_remote(**relation_info)
