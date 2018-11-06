@@ -54,6 +54,8 @@ class NeutronPluginAPISubordinate(RelationBase):
         #     }
         # }
         """
+        if subordinate_configuration is None:
+            subordinate_configuration = {}
         conversation = self.conversation()
         relation_info = {
             'neutron-plugin': neutron_plugin,
