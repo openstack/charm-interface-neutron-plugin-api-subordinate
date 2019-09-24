@@ -6,25 +6,46 @@ that charm.
 
 # Usage
 
-## States
+## Flags and States
 The interface provides the `{relation-name}.connected` and
-`{relation_name}.available` states.
+`{relation_name}.available` flags and states.
+
+## neutron\_config\_data
+
+The neutron\_config\_data property allows the charm author to introspect a
+subset of the principle charm context values prior to applying the context
+provided by this relation.
+
+This enables the subordinate charm to make informed decisions about how it
+should configure Neutron based on how the deployment is configured.
+
+```python
+@reactive.when('neutron-plugin-api-subordinate.connected')
+def configure_principle():
+    api_principle = reactive.endpoint_from_flag(
+        'neutron-plugin-api-subordinate.connected')
+    if 'dns' in api_principle.neutron_config_data['extension_drivers']:
+        ...
 
 ## configure\_plugin
 
 The configure\_plugin method allows the following to be configured in the
 principle charm:
 
-* **neutron\_plugin**: Name of the plugin type eg 'ovs', 'odl' etc. This is not
-                   currently used in the principle but should be set to
-                   something representitve of the plugin type.
+* **neutron\_plugin**: Name of the plugin type eg 'ovs', 'ovn' etc. This is not
+                       currently used in the principle but should be set to
+                       something representitve of the plugin type.
 * **core\_plugin**:    Value of core\_plugin to be set in neutron.conf
-* **neutron\_plugin\_config**: File containing plugin config. This config file is
-                            appended to the list of configs the neutron
-                            services read on startup.
+* **neutron\_plugin\_config**: File containing plugin config. This config file
+                               is appended to the list of configs the neutron
+                               services read on startup.
 * **service\_plugins**: Value of service\_plugins to be set in neutron.conf
-* **subordinate\_configuration**: Config to be inserted into a configuration file
-                              that the principle manages.
+* **subordinate\_configuration**: Config to be inserted into a configuration
+                                  file that the principle manages.
+* **extension\_drivers**: Value of extension\_drivers to be set in
+                          ml2\_conf.ini
+* **neutron\_security\_groups**: Toggle whether the Neutron security group
+                                 feature should be enabled or not.
 
 Request `foo = bar` is inserted into the `DEFAULT` section of neutron.conf
 
@@ -43,11 +64,15 @@ def configure_principle(api_principle):
             }
         }
     }
+    service_plugins = ','.join((
+        api_principle.neutron_config_data.get('service_plugins', ''),
+        'networking_ovn.l3.l3_ovn.OVNL3RouterPlugin'),
+    )
     api_principle.configure_plugin(
-        neutron_plugin='odl',
+        neutron_plugin='ovn',
         core_plugin='neutron.plugins.ml2.plugin.Ml2Plugin',
         neutron_plugin_config='/etc/neutron/plugins/ml2/ml2_conf.ini',
-        service_plugins='router,firewall,lbaas,vpnaas,metering',
+        service_plugins=service_plugins,
         subordinate_configuration=inject_config)
 ```
 

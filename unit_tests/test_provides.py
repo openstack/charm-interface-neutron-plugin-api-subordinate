@@ -109,6 +109,12 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
         conversation = mock.MagicMock()
         self.patch_target('conversation', conversation)
         self.patch_target('set_state')
+        self.patch_target('get_remote')
+        self.get_remote.return_value = None
+        self.target.changed()
+        self.set_state.assert_called_once_with('{relation_name}.connected')
+        self.set_state.reset_mock()
+        self.get_remote.return_value = 'yes'
         self.target.changed()
         self.set_state.assert_has_calls([
             mock.call('{relation_name}.connected'),
@@ -125,6 +131,18 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
             mock.call('{relation_name}.connected'),
         ])
 
+    def test_neutron_api_ready(self):
+        self.patch_target('get_remote')
+        self.get_remote.return_value = 'yes'
+        self.assertTrue(self.target.neutron_api_ready())
+        self.get_remote.return_value = None
+        self.assertFalse(self.target.neutron_api_ready())
+
+    def teat_neutron_config_data(self):
+        self.patch_target('get_remote')
+        self.get_remote = json.dumps({'k': 'v'})
+        self.assertEquals(self.target.neutron_config_data, {'k': 'v'})
+
     def test_configure_plugin(self):
         conversation = mock.MagicMock()
         self.patch_target('conversation', conversation)
@@ -132,13 +150,22 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
                                      'aCorePlugin',
                                      'aNeutronPluginConfig',
                                      'servicePlugins1,servicePlugin2',
-                                     {'aKey': 'aValue'})
+                                     {'aKey': 'aValue'},
+                                     'extensionDriver1,extensionDriver2',
+                                     'mechanismDriver1,mechanismDriver2',
+                                     'typeDriver1,typeDriver2',
+                                     'toggleSecurityGroups',
+                                     )
         conversation.set_remote.assert_called_once_with(
             **{
                 'core-plugin': 'aCorePlugin',
                 'neutron-plugin': 'aPlugin',
                 'neutron-plugin-config': 'aNeutronPluginConfig',
                 'service-plugins': 'servicePlugins1,servicePlugin2',
+                'extension-drivers': 'extensionDriver1,extensionDriver2',
+                'mechanism-drivers': 'mechanismDriver1,mechanismDriver2',
+                'tenant-network-types': 'typeDriver1,typeDriver2',
+                'neutron-security-groups': 'toggleSecurityGroups',
                 'subordinate_configuration': json.dumps({'aKey': 'aValue'})},
         )
 
