@@ -144,8 +144,7 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
         self.assertEquals(self.target.neutron_config_data, {'k': 'v'})
 
     def test_configure_plugin(self):
-        conversation = mock.MagicMock()
-        self.patch_target('conversation', conversation)
+        self.patch_target('set_remote')
         self.target.configure_plugin('aPlugin',
                                      'aCorePlugin',
                                      'aNeutronPluginConfig',
@@ -156,7 +155,7 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
                                      'typeDriver1,typeDriver2',
                                      'toggleSecurityGroups',
                                      )
-        conversation.set_remote.assert_called_once_with(
+        self.set_remote.assert_called_once_with(
             **{
                 'core-plugin': 'aCorePlugin',
                 'neutron-plugin': 'aPlugin',
@@ -170,16 +169,63 @@ class TestNeutronPluginApiSubordinateProvides(test_utils.PatchHelper):
         )
 
     def test_request_restart(self):
-        conversation = mock.MagicMock()
-        self.patch_target('conversation', conversation)
         self.patch_object(provides.uuid, 'uuid4')
         self.uuid4.return_value = 'fake-uuid'
+        self.patch_target('set_remote')
         self.target.request_restart()
-        conversation.set_remote.assert_called_once_with(
-            None, None, None, **{'restart-trigger': 'fake-uuid'},
+        self.set_remote.assert_called_once_with(
+            **{'restart-trigger': 'fake-uuid'},
         )
-        conversation.set_remote.reset_mock()
+        self.set_remote.reset_mock()
         self.target.request_restart('aServiceType')
-        conversation.set_remote.assert_called_once_with(
-            None, None, None, **{'restart-trigger-aServiceType': 'fake-uuid'},
+        self.set_remote.assert_called_once_with(
+            **{'restart-trigger-aServiceType': 'fake-uuid'},
         )
+
+    def test_request_db_migration(self):
+        self.patch_target('neutron_api_ready')
+        self.patch_object(provides.uuid, 'uuid4')
+        self.neutron_api_ready.return_value = False
+        self.target.request_db_migration()
+        self.assertFalse(self.uuid4.called)
+        self.patch_target('set_remote')
+        self.patch_object(provides.reactive, 'set_flag')
+        self.patch_object(provides.reactive, 'clear_flag')
+        self.neutron_api_ready.return_value = True
+        self.uuid4.return_value = 'fake-uuid'
+        self.target.request_db_migration()
+        self.set_remote.assert_called_once_with(
+            **{'migrate-database-nonce': 'fake-uuid'})
+        self.set_flag.assert_has_calls([
+            mock.call('some-relation.db_migration'),
+            mock.call('some-relation.db_migration.fake-uuid'),
+        ])
+        self.clear_flag.assert_called_once_with('some-relation.available')
+
+    def test_db_migration_pending(self):
+        self.patch_object(provides.reactive, 'is_flag_set')
+        self.patch_target('get_remote')
+        self.is_flag_set.return_value = False
+        self.target.db_migration_pending()
+        self.is_flag_set.assert_called_once_with('some-relation.db_migration')
+        self.assertFalse(self.get_remote.called)
+        self.is_flag_set.side_effect = [True, False]
+        self.get_remote.return_value = 'fake-uuid'
+        self.assertTrue(self.target.db_migration_pending())
+        self.get_remote.assert_called_once_with('migrate-database-nonce', '')
+        self.is_flag_set.assert_has_calls([
+            mock.call('some-relation.db_migration'),
+            mock.call('some-relation.db_migration.fake-uuid'),
+        ])
+        self.is_flag_set.side_effect = [True, True]
+        self.patch_object(provides.reactive, 'clear_flag')
+        self.patch_object(provides.reactive, 'get_flags')
+        self.get_flags.return_value = [
+            'some-relation.db_migration.fake-uuid',
+            'some-relation.db_migration',
+        ]
+        self.assertFalse(self.target.db_migration_pending())
+        self.clear_flag.assert_has_calls([
+            mock.call('some-relation.db_migration.fake-uuid'),
+            mock.call('some-relation.db_migration'),
+        ])

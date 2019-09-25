@@ -1,14 +1,18 @@
 # Overview
 
 This interface is used for a charm to send configuration information to the
-neutron-api principle charm and request a restart of a service managed by
-that charm.
+neutron-api principle charm, request a restart of a service managed by
+that charm, and request database migration to be performed.
 
 # Usage
 
 ## Flags and States
 The interface provides the `{relation-name}.connected` and
 `{relation_name}.available` flags and states.
+
+The charm may set the `{relation-name}.db_migration` flag to instruct the
+interface code to gate the `{relation_name}.available` flag/state on
+completion of any in-flight database migration requests.
 
 ## neutron\_config\_data
 
@@ -94,6 +98,51 @@ Requesting a restart of a specific type of remote services:
 def remote_restart(api_principle):
     ...
     api_principle.request_restart(service_type='neutron')
+```
+
+## request\_db\_migration
+
+Request principle charm to perform a DB migration.  This is useful both at
+initial deploy time and at subsequent changes as the lifecycle of the
+subordinate may be independent of the principle charm.
+
+An example of how to request db migration upon initial deployment:
+
+```python
+@reactive.when_none('neutron-plugin-api-subordinate.db_migration',
+                    'neutron-plugin-api-subordinate.available')
+@reactive.when('charm.installed')
+def flag_db_migration():
+    reactive.set_flag('neutron-plugin-api-subordinate.db_migration')
+
+
+@reactive.when_none('neutron-plugin-api-subordinate.available',
+                    'run-default-update-status')
+@reactive.when('neutron-plugin-api-subordinate.connected')
+def request_db_migration():
+    neutron = reactive.endpoint_from_flag(
+        'neutron-plugin-api-subordinate.connected')
+    neutron.request_db_migration()
+```
+
+An example of usage in conjunction with post deployment change:
+
+```python
+@reactive.when('config.changed')
+def handle_change():
+    ...
+    if config_change_added_package_which_requires_db_migration:
+        neutron = reactive.endpoint_from_flag(
+            'neutron-plugin-api-subordinate.connected')
+        neutron.request_db_migration()
+
+
+@reactive.when('neutron-plugin-api-subordinate.available')
+def do_something():
+    ...
+    # After requesting the DB migration above, you will not get here until it
+    # is done.
+    use_new_feature()
 ```
 
 # Metadata

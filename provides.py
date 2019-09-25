@@ -1,6 +1,8 @@
 import uuid
 import json
 
+import charms.reactive as reactive
+
 from charms.reactive import hook
 from charms.reactive import RelationBase
 from charms.reactive import scopes
@@ -12,9 +14,9 @@ class NeutronPluginAPISubordinate(RelationBase):
     @hook(
         '{provides:neutron-plugin-api-subordinate}-relation-{joined,changed}')
     def changed(self):
-        """Set connected state"""
+        """Set connected state and assess available state"""
         self.set_state('{relation_name}.connected')
-        if self.neutron_api_ready():
+        if self.neutron_api_ready() and not self.db_migration_pending():
             self.set_state('{relation_name}.available')
 
     @hook(
@@ -26,9 +28,11 @@ class NeutronPluginAPISubordinate(RelationBase):
 
     @property
     def neutron_config_data(self):
+        """Retrive and decode ``neutron_config_data`` from relation"""
         return json.loads(self.get_remote('neutron_config_data', "{}"))
 
     def neutron_api_ready(self):
+        """Assess remote readiness"""
         if self.get_remote('neutron-api-ready') == 'yes':
             return True
         return False
@@ -88,7 +92,6 @@ class NeutronPluginAPISubordinate(RelationBase):
         """
         if subordinate_configuration is None:
             subordinate_configuration = {}
-        conversation = self.conversation()
         relation_info = {
             'neutron-plugin': neutron_plugin,
             'core-plugin': core_plugin,
@@ -100,7 +103,7 @@ class NeutronPluginAPISubordinate(RelationBase):
             'neutron-security-groups': neutron_security_groups,
             'subordinate_configuration': json.dumps(subordinate_configuration),
         }
-        conversation.set_remote(**relation_info)
+        self.set_remote(**relation_info)
 
     def request_restart(self, service_type=None):
         """Request a restart of a set of remote services
@@ -117,3 +120,52 @@ class NeutronPluginAPISubordinate(RelationBase):
             key: str(uuid.uuid4()),
         }
         self.set_remote(**relation_info)
+
+    def request_db_migration(self):
+        """Request principal to perform a DB migration"""
+        if not self.neutron_api_ready():
+            # Ignore the charm request until we are in a relation-changed hook
+            # where the prinicpal charm has declared itself ready.
+            return
+        nonce = str(uuid.uuid4())
+        relation_info = {
+            'migrate-database-nonce': nonce,
+        }
+        self.set_remote(**relation_info)
+        # NOTE: we use flags instead of RelationBase state here both because of
+        #       easier interaction with charm code, and because of how states
+        #       interact with RelationBase conversations leading to crashes
+        #       when used prior to relation being fully established.
+        reactive.set_flag('{relation_name}.db_migration'
+                          .format(relation_name=self.relation_name))
+        reactive.set_flag('{relation_name}.db_migration.'
+                          .format(relation_name=self.relation_name)+nonce)
+        reactive.clear_flag('{relation_name}.available'
+                            .format(relation_name=self.relation_name))
+
+    def db_migration_pending(self):
+        """Assess presence and state of optional DB migration request"""
+        # NOTE: we use flags instead of RelationBase state here both because of
+        #       easier interaction with charm code, and because of how states
+        #       interact with RelationBase conversations leading to crashes
+        #       when used prior to relation being fully established.
+        flag_prefix = ('{relation_name}.db_migration'
+                       .format(relation_name=self.relation_name))
+        if not reactive.is_flag_set(flag_prefix):
+            return False
+        flag_nonce = '.'.join(
+            (flag_prefix,
+             self.get_remote('migrate-database-nonce', '')))
+        if reactive.is_flag_set(flag_nonce):
+            # hooks fire in a nondeterministic order, and there will be
+            # occations where a different hook run between the
+            # ``migrate-database-nonce`` being set and it being returned to us
+            # a subsequent relation-changed hook.
+            #
+            # to avoid buildup of unreaped db_migration nonce flags we remove
+            # all of them each time we have a match for one.
+            for flag in reactive.get_flags():
+                if flag.startswith(flag_prefix):
+                    reactive.clear_flag(flag)
+            return False
+        return True
